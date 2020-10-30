@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -e #Fail on error
+
+OIFS=$IFS
+IFS=','
+
+cat <<"EOF"
+   _____ _                                                _ _
+  / ____| |                                /\            | (_)
+ | (___ | |_ _ __ ___  __ _ _ __ ___      /  \  _   _  __| |_  ___
+  \___ \| __| '__/ _ \/ _` | '_ ` _ \    / /\ \| | | |/ _` | |/ _ \
+  ____) | |_| | |  __/ (_| | | | | | |  / ____ \ |_| | (_| | | (_) |
+ |_____/ \__|_|  \___|\__,_|_| |_| |_| /_/    \_\__,_|\__,_|_|\___/
+EOF
+
+readonly target_audio_device="alsa_output.pci-0000_2d_00.3.analog-stereo"
+
+echo "Loading the null sink module."
+
+if ! pactl load-module module-null-sink >/dev/null 2>&1; then
+    echo "Unable to load null sink module."
+    exit 1
+fi
+
+echo "Generating audio device array."
+audio_array=($(pactl list short sinks | awk {'print $2","'}))
+
+echo "Finding required audio devices."
+for i in "${!audio_array[@]}"; do
+    :
+    if [[ ${audio_array[$i]//$'\n'/} == "$target_audio_device" ]]; then
+        target_audio_id=$i
+    elif [[ ${audio_array[$i]//$'\n'/} == "null" ]]; then
+        null_audio_id=$i
+    fi
+done
+
+if [[ -z $target_audio_id ]] || [[ -z $null_audio_id ]]; then
+    echo "Unable to find audio device IDs"
+    exit 1
+fi
+
+echo "Target audio device ID = $target_audio_id"
+echo "Null audio device ID = $null_audio_id"
+
+echo "Creating sink slaves."
+pactl load-module module-combine-sink slaves="$target_audio_id","$null_audio_id"
+notify-send 'Stream Audio' 'Null & simultaneous sinks created' --icon=dialog-information
